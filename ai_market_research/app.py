@@ -1,8 +1,8 @@
 import streamlit as st
 import os
-from ai_market_research.mcp_trends import run_mcp_trends
-from ai_market_research.analysis_agent import run_analysis_agent
-from ai_market_research.report_agent import run_report_agent
+from mcp_trends import run_mcp_trends
+from analysis_agent import run_analysis_agent
+from report_agent import run_report_agent
 
 st.title("✅ Streamlit App Loaded!")
 st.write("If you're seeing this, the app is working.")

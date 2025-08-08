@@ -1,10 +1,9 @@
 import streamlit as st
 import os
-from mcp_trends import run_mcp_trends
-from analysis_agent import run_analysis_agent
-from report_agent import run_report_agent
+from ai_market_research.mcp_trends import run_mcp_trends
+from ai_market_research.analysis_agent import run_analysis_agent
+from ai_market_research.report_agent import run_report_agent
 
-# MUST BE FIRST
 st.set_page_config(page_title="Market Research Agent", layout="centered")
 
 st.title("✅ Streamlit App Loaded!")

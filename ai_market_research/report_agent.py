@@ -42,9 +42,8 @@ def generate_report():
     print(result)
     return jsonify(result)
 
-# Run summarization and server only if executed directly
-if __name__ == "__main__":
-    # Summarize strategy
+# ✅ The function to be imported in app.py
+def run_report_agent():
     summary = summarize_strategy("ai-market-research/strategy.txt")
 
     with open("ai-market-research/summary.txt", "w", encoding='utf-8') as f:
@@ -52,5 +51,5 @@ if __name__ == "__main__":
 
     print("✅ Final report saved to summary.txt")
 
-    # Start Flask server
-    app.run(port=7001)
+    # Start Flask server (optional during local dev)
+    # app.run(port=7001)

@@ -29,6 +29,7 @@ def run_analysis_agent(keyword):
         f.write(keyword)
 
     # Load raw trends
+    DATA_DIR = "ai-market-research"  # or wherever raw_trends.txt is located
     raw_path = os.path.join(DATA_DIR, "raw_trends.txt")
     with open(raw_path, "r", encoding='utf-8') as f:
         raw = f.readlines()

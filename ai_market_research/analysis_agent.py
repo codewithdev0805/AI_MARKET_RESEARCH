@@ -3,23 +3,17 @@ import requests
 
 app = Flask(__name__)
 
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    data = request.json["data"]
-    insights = [f"INSIGHT: {trend.upper()}" for trend in data]
-    print("Insights:", insights)
-    requests.post("http://localhost:7001/report", json={"insights": insights})
-    return jsonify({"insights": insights})
-
 def analyst_agent(trends):
     print("🔍 Analyst Agent: Interpreting raw market trends...")
-    return [t.upper() for t in trends]  # dummy transformation
+    return [t.strip().upper() for t in trends]
 
 def strategist_agent(interpreted):
     print("🧠 Strategist Agent: Generating business recommendations...")
     return [f"Opportunity: {line}" for line in interpreted]
 
-if __name__ == "__main__":
+def run_analysis_agent():
+    print("⚙️ Running analysis agent as a function...")
+
     with open("ai-market-research/raw_trends.txt", "r", encoding='utf-8') as f:
         raw = f.readlines()
 
@@ -31,7 +25,19 @@ if __name__ == "__main__":
             f.write(f"{item}\n")
 
     print("✅ Strategy recommendations saved to strategy.txt")
+    return strategy
 
+
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    data = request.json["data"]
+    insights = analyst_agent(data)
+    strategy = strategist_agent(insights)
+
+    print("Insights:", strategy)
+    requests.post("http://localhost:7001/report", json={"insights": strategy})
+    return jsonify({"insights": strategy})
 
 if __name__ == "__main__":
     app.run(port=6001)
+

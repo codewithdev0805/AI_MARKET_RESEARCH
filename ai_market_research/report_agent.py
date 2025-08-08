@@ -2,10 +2,6 @@ from flask import Flask, request, jsonify
 import requests
 from openai import OpenAI
 import os
-from dotenv import load_dotenv
-
-# Load environment variables from .env
-load_dotenv()
 
 # Initialize OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])

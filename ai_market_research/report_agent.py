@@ -1,13 +1,19 @@
-from flask import Flask, request, jsonify
-import requests
-from openai import OpenAI
-import streamlit as st
 import os
+import requests
+from flask import Flask, request, jsonify
+from openai import OpenAI
 
-# Initialize OpenAI client
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# ✅ Try to load from Streamlit secrets if available (only inside Streamlit app)
+try:
+    import streamlit as st
+    api_key = st.secrets["OPENAI_API_KEY"]
+except:
+    api_key = os.getenv("OPENAI_API_KEY")  # fallback for local dev or Flask server
 
-# Function to summarize strategy file using OpenAI
+# ✅ Initialize OpenAI client
+client = OpenAI(api_key=api_key)
+
+# 🧠 Summarize strategy using OpenAI
 def summarize_strategy(file_path):
     with open(file_path, "r", encoding='utf-8') as f:
         strategy = f.read()
@@ -24,25 +30,7 @@ def summarize_strategy(file_path):
 
     return response.choices[0].message.content
 
-# Flask app setup
-app = Flask(__name__)
-
-# Route to generate PDF report
-@app.route("/report", methods=["POST"])
-def generate_report():
-    insights = request.json["insights"]
-
-    # Call the PDF generation microservice
-    response = requests.post("http://localhost:5002/call-tool", json={
-        "name": "generate_pdf",
-        "parameters": {"insights": insights}
-    })
-
-    result = response.json()
-    print(result)
-    return jsonify(result)
-
-# ✅ The function to be imported in app.py
+# ✅ Function to be called from app.py
 def run_report_agent():
     summary = summarize_strategy("ai-market-research/strategy.txt")
 
@@ -51,5 +39,16 @@ def run_report_agent():
 
     print("✅ Final report saved to summary.txt")
 
-    # Start Flask server (optional during local dev)
-    # app.run(port=7001)
+# Optional: Run Flask server locally (if needed)
+app = Flask(__name__)
+
+@app.route("/report", methods=["POST"])
+def generate_report():
+    insights = request.json["insights"]
+
+    response = requests.post("http://localhost:5002/call-tool", json={
+        "name": "generate_pdf",
+        "parameters": {"insights": insights}
+    })
+
+    return jsonify(response.json())

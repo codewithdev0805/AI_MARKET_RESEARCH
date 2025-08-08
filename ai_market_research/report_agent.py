@@ -3,18 +3,27 @@ import requests
 from flask import Flask, request, jsonify
 from openai import OpenAI
 
-# ✅ Try to load from Streamlit secrets if available (only inside Streamlit app)
+# ✅ Try to load API key from Streamlit secrets or fallback to env
 try:
     import streamlit as st
     api_key = st.secrets["OPENAI_API_KEY"]
 except:
-    api_key = os.getenv("OPENAI_API_KEY")  # fallback for local dev or Flask server
+    api_key = os.getenv("OPENAI_API_KEY")
+
+# ✅ Log to confirm key is loaded (use only for debug, not in production)
+if api_key:
+    print(f"🔐 OpenAI key loaded: {api_key[:5]}...")
+else:
+    raise ValueError("❌ OPENAI_API_KEY not found in Streamlit secrets or environment variables.")
 
 # ✅ Initialize OpenAI client
 client = OpenAI(api_key=api_key)
 
 # 🧠 Summarize strategy using OpenAI
 def summarize_strategy(file_path):
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"❌ strategy file not found: {file_path}")
+
     with open(file_path, "r", encoding='utf-8') as f:
         strategy = f.read()
 
@@ -28,23 +37,26 @@ def summarize_strategy(file_path):
         ]
     )
 
-    return response.choices[0].message.content
+    return response.choices[0].message.content.strip()
 
 # ✅ Function to be called from app.py
 def run_report_agent():
     summary = summarize_strategy("ai-market-research/strategy.txt")
 
-    with open("ai-market-research/summary.txt", "w", encoding='utf-8') as f:
+    output_path = "ai-market-research/summary.txt"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, "w", encoding='utf-8') as f:
         f.write(summary)
 
     print("✅ Final report saved to summary.txt")
 
-# Optional: Run Flask server locally (if needed)
+# ✅ Optional Flask app for local microservice use
 app = Flask(__name__)
 
 @app.route("/report", methods=["POST"])
 def generate_report():
-    insights = request.json["insights"]
+    insights = request.json.get("insights", "")
 
     response = requests.post("http://localhost:5002/call-tool", json={
         "name": "generate_pdf",

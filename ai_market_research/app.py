@@ -18,7 +18,7 @@ if st.button("Generate Market Report"):
     else:
         with st.spinner("Running market analysis agents..."):
             # ✅ Save keyword and trends
-            fetch_mcp_trends(keyword)  # Corrected function name
+            run_mcp_trends(keyword)  # Corrected function name
             run_analysis_agent(keyword)
             run_report_agent()
 

@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from mcp_trends import run_mcp_trends
+from mcp_trends import fetch_mcp_trends  # ✅ Correct import
 from analysis_agent import run_analysis_agent
 from report_agent import run_report_agent
 
@@ -9,7 +9,7 @@ st.set_page_config(page_title="Market Research Agent", layout="centered")
 st.title("✅ Streamlit App Loaded!")
 st.write("If you're seeing this, the app is working.")
 
-st.title(" AI-Powered Market Research Generator")
+st.title("🧠 AI-Powered Market Research Generator")
 keyword = st.text_input("Enter a keyword or industry:")
 
 if st.button("Generate Market Report"):
@@ -17,15 +17,16 @@ if st.button("Generate Market Report"):
         st.warning("Please enter a keyword.")
     else:
         with st.spinner("Running market analysis agents..."):
-            run_mcp_trends(keyword)
+            # ✅ Save keyword and trends
+            fetch_mcp_trends(keyword)  # Corrected function name
             run_analysis_agent(keyword)
             run_report_agent()
 
-        st.success(" Report generated!")
+        st.success("✅ Report generated!")
 
         pdf_path = "ai-market-research/final_report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button(" Download PDF Report", f, file_name="market_report.pdf")
+                st.download_button("📄 Download PDF Report", f, file_name="market_report.pdf")
         else:
             st.error("Report not found. Please check for errors in your script.")

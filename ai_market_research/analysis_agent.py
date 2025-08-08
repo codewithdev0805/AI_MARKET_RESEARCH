@@ -1,78 +1,70 @@
 from flask import Flask, request, jsonify
 import requests
+import os
 
 app = Flask(__name__)
 
-# === SMART ANALYST AGENT ===
-def analyst_agent(raw_data, keyword=None):
+# Set up data directory path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "ai-market-research")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Agent: Interprets raw trends
+def analyst_agent(trends):
     print("🔍 Analyst Agent: Interpreting raw market trends...")
+    return [trend.strip().capitalize() for trend in trends if trend.strip()]
 
-    # Handle keyword enrichment
-    if keyword:
-        filtered = [line for line in raw_data if keyword.lower() in line.lower()]
-        if not filtered:
-            # Fallback: no direct matches
-            filtered = [f"No direct trend mentions of '{keyword}'. Please infer insights related to it."]
-        else:
-            # Add context prefix
-            filtered = [f"Keyword: {keyword}"] + filtered
-    else:
-        filtered = raw_data
-
-    # Simulate interpretation (replace with OpenAI later)
-    return [f"Insight: {line.strip().upper()}" for line in filtered]
-
-
-# === SMART STRATEGIST AGENT ===
+# Agent: Translates insights into business strategy
 def strategist_agent(insights):
     print("🧠 Strategist Agent: Generating business recommendations...")
-    # Simulate recommendations
-    return [f"📈 Opportunity: Based on {insight}" for insight in insights]
+    return [f"Opportunity: {insight}" for insight in insights]
 
-
-# === MAIN FUNCTION FOR AGENT RUN ===
+# Main function to run both agents
 def run_analysis_agent(keyword):
     print(f"⚙️ Running analysis agent for keyword: {keyword}")
 
     # Save keyword
-    with open("ai-market-research/selected_keyword.txt", "w", encoding='utf-8') as f:
+    keyword_file = os.path.join(DATA_DIR, "selected_keyword.txt")
+    with open(keyword_file, "w", encoding='utf-8') as f:
         f.write(keyword)
 
-    # Read raw market trends
-    with open("ai-market-research/raw_trends.txt", "r", encoding='utf-8') as f:
+    # Load raw trends
+    raw_path = os.path.join(DATA_DIR, "raw_trends.txt")
+    with open(raw_path, "r", encoding='utf-8') as f:
         raw = f.readlines()
 
-    # Run both agents
-    insights = analyst_agent(raw, keyword=keyword)
-    strategy = strategist_agent(insights)
+    # Optional: Filter raw data by keyword
+    raw_filtered = [line for line in raw if keyword.lower() in line.lower()]
+    if not raw_filtered:
+        print("⚠️ No matching trends found for the keyword. Using full dataset.")
+        raw_filtered = raw
 
-    # Save strategy
-    with open("ai-market-research/strategy.txt", "w", encoding='utf-8') as f:
+    # Run both agents
+    interpreted = analyst_agent([f"Keyword: {keyword}"] + raw_filtered)
+    strategy = strategist_agent(interpreted)
+
+    # Save strategy to file
+    strategy_path = os.path.join(DATA_DIR, "strategy.txt")
+    with open(strategy_path, "w", encoding='utf-8') as f:
         for item in strategy:
             f.write(f"{item}\n")
 
     print("✅ Strategy recommendations saved to strategy.txt")
     return strategy
 
-
-# === FLASK API ENDPOINT ===
+# API endpoint to trigger agent
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    payload = request.json
-    keyword = payload.get("keyword", "")
-    data = payload.get("data", [])
+    data = request.json.get("data", [])
+    keyword = request.json.get("keyword", "default")
 
-    insights = analyst_agent(data, keyword=keyword)
-    strategy = strategist_agent(insights)
+    # Use new agents
+    interpreted = analyst_agent(data)
+    strategy = strategist_agent(interpreted)
 
-    print("✅ Insights generated:", strategy)
-
-    # Forward insights to report agent (PDF tool)
+    # Optional: trigger external report generation
     requests.post("http://localhost:7001/report", json={"insights": strategy})
-
     return jsonify({"insights": strategy})
 
-
-# === RUN LOCAL SERVER ===
 if __name__ == "__main__":
     app.run(port=6001)

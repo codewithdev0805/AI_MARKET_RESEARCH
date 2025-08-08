@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from mcp_trends import fetch_mcp_trends  # ✅ Correct import
+from mcp_trends import run_mcp_trends
 from analysis_agent import run_analysis_agent
 from report_agent import run_report_agent
 

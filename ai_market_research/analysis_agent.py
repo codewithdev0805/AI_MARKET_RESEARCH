@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # Set up data directory path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "ai-market-research")
+DATA_DIR = os.path.join(BASE_DIR, "..", "ai-market-research")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Agent: Interprets raw trends
@@ -29,8 +29,10 @@ def run_analysis_agent(keyword):
         f.write(keyword)
 
     # Load raw trends
-    DATA_DIR = "ai_market_research/ai-market-research"  # or wherever raw_trends.txt is located
     raw_path = os.path.join(DATA_DIR, "raw_trends.txt")
+    if not os.path.exists(raw_path):
+        raise FileNotFoundError(f"Missing file: {raw_path}")
+
     with open(raw_path, "r", encoding='utf-8') as f:
         raw = f.readlines()
 
@@ -64,7 +66,11 @@ def analyze():
     strategy = strategist_agent(interpreted)
 
     # Optional: trigger external report generation
-    requests.post("http://localhost:7001/report", json={"insights": strategy})
+    try:
+        requests.post("http://localhost:7001/report", json={"insights": strategy})
+    except Exception as e:
+        print(f"⚠️ Could not send report: {e}")
+
     return jsonify({"insights": strategy})
 
 if __name__ == "__main__":

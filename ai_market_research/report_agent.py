@@ -1,79 +1,79 @@
 import os
+import json
 import requests
-from flask import Flask, request, jsonify
 from fpdf import FPDF
-from groq import Groq  # ✅ LLaMA client
+from groq import Groq
 
-# ====== Load API key ======
-try:
-    import streamlit as st
-    API_KEY = st.secrets.get("GROQ_API_KEY", None)
-except:
-    API_KEY = os.getenv("GROQ_API_KEY")
+# Initialize Groq client (LLaMA 3 via Groq API)
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("❌ GROQ_API_KEY not found in environment variables.")
+client = Groq(api_key=api_key)
 
-if not API_KEY:
-    raise ValueError("❌ GROQ_API_KEY not found in Streamlit secrets or environment variables.")
+# ──────────────────────────────────────────────
+# Call LLaMA Model and Enforce JSON Output
+# ──────────────────────────────────────────────
+def call_ai_model(prompt: str) -> dict:
+    """Send prompt to LLaMA via Groq and return parsed JSON."""
+    json_format_instructions = """
+    Return ONLY a valid JSON object in this exact format:
+    {
+      "title": "string",
+      "key_highlights": ["point 1", "point 2", "point 3"],
+      "business_implications": ["point 1", "point 2"],
+      "recommendations": ["point 1", "point 2"]
+    }
+    """
 
-# ✅ Initialize Groq client
-client = Groq(api_key=API_KEY)
-
-
-# ====== AI CALL ======
-def call_ai_model(prompt: str) -> str:
-    """Send prompt to LLaMA via Groq and return response text."""
     response = client.chat.completions.create(
-        model="llama3-8b-8192",  # You can use llama3-70b-8192 if needed
+        model="llama3-8b-8192",
         messages=[
-            {"role": "system", "content": "You are a market research analyst. Respond in structured bullet points."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": "You are a market research analyst. Respond in JSON format only."},
+            {"role": "user", "content": prompt + "\n\n" + json_format_instructions}
         ],
-        temperature=0.7,
+        temperature=0.3,
         max_tokens=1500
     )
-    return response.choices[0].message.content.strip()
+    raw_output = response.choices[0].message.content.strip()
 
+    try:
+        return json.loads(raw_output)
+    except json.JSONDecodeError:
+        raise ValueError(f"❌ Model did not return valid JSON. Output:\n{raw_output}")
 
-# ====== PDF GENERATOR ======
-def generate_pdf(data, output_path):
-    """Generate a clean, professional PDF report."""
+# ──────────────────────────────────────────────
+# PDF Generator
+# ──────────────────────────────────────────────
+def generate_pdf(data: dict, output_path: str):
+    """Generate a nicely formatted PDF from structured data."""
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-
-    # Title
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 10, data["title"])
+    pdf.set_font("Arial", 'B', 16)
+    pdf.multi_cell(0, 10, data.get("title", "Market Research Report"), align="C")
     pdf.ln(5)
 
-    # Key Highlights
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Key Highlights:", ln=True)
-    pdf.set_font("Helvetica", "", 12)
-    for item in data["key_highlights"]:
-        pdf.multi_cell(0, 8, f"• {item}")
-    pdf.ln(3)
+    def add_section(title, items):
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 10, title, ln=True)
+        pdf.set_font("Arial", '', 12)
+        if items:
+            for item in items:
+                pdf.multi_cell(0, 8, f"• {item}")
+        else:
+            pdf.multi_cell(0, 8, "No data available.")
+        pdf.ln(3)
 
-    # Business Implications
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Business Implications:", ln=True)
-    pdf.set_font("Helvetica", "", 12)
-    for item in data["business_implications"]:
-        pdf.multi_cell(0, 8, f"• {item}")
-    pdf.ln(3)
-
-    # Recommendations
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "Recommendations:", ln=True)
-    pdf.set_font("Helvetica", "", 12)
-    for item in data["recommendations"]:
-        pdf.multi_cell(0, 8, f"• {item}")
+    add_section("Key Highlights:", data.get("key_highlights", []))
+    add_section("Business Implications:", data.get("business_implications", []))
+    add_section("Recommendations:", data.get("recommendations", []))
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     pdf.output(output_path)
     print(f"✅ PDF saved to {output_path}")
 
-
-# ====== MAIN FUNCTION ======
+# ──────────────────────────────────────────────
+# Main Function
+# ──────────────────────────────────────────────
 def run_report_agent():
     strategy_path = "ai-market-research/strategy.txt"
     if not os.path.exists(strategy_path):
@@ -82,56 +82,12 @@ def run_report_agent():
     with open(strategy_path, "r", encoding="utf-8") as f:
         strategy = f.read()
 
-    # Ask AI to structure content
-    prompt = f"""
-    Summarize the following strategy for a business report.
-    Return the result in this structure:
-    Title: ...
-    Key Highlights: [point1, point2, ...]
-    Business Implications: [point1, point2, ...]
-    Recommendations: [point1, point2, ...]
+    prompt = f"Summarize the following strategy for a business report:\n\n{strategy}"
+    structured_data = call_ai_model(prompt)
 
-    Strategy content:
-    {strategy}
-    """
-    ai_response = call_ai_model(prompt)
-
-    # Parse into structured data
-    structured_data = {"title": "", "key_highlights": [], "business_implications": [], "recommendations": []}
-    section = None
-    for line in ai_response.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.lower().startswith("title:"):
-            structured_data["title"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("key highlights"):
-            section = "key_highlights"
-        elif line.lower().startswith("business implications"):
-            section = "business_implications"
-        elif line.lower().startswith("recommendations"):
-            section = "recommendations"
-        elif line.startswith("*") or line.startswith("-"):
-            if section:
-                structured_data[section].append(line[1:].strip())
-
-    # Save summary.txt
+    # Save JSON summary
     with open("ai-market-research/summary.txt", "w", encoding="utf-8") as f:
-        f.write(ai_response)
+        json.dump(structured_data, f, indent=2)
 
     # Generate PDF
     generate_pdf(structured_data, "ai-market-research/final_report.pdf")
-
-
-# ====== FLASK ENDPOINT (optional) ======
-app = Flask(__name__)
-
-@app.route("/report", methods=["POST"])
-def generate_report():
-    insights = request.json.get("insights", "")
-    run_report_agent()
-    return jsonify({"status": "PDF generated"})
-
-
-if __name__ == "__main__":
-    run_report_agent()

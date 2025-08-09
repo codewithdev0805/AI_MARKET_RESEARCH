@@ -33,7 +33,7 @@ class PDF(FPDF):
         self.rect(0, 0, 210, 20, "F")  # Fill top area
         self.set_text_color(255, 255, 255)
         self.set_font("Helvetica", "B", 18)
-        self.cell(0, 10, "📊 Market Research Report", ln=True, align="C")
+        self.cell(0, 10, "Market Research Report", ln=True, align="C")
         self.ln(5)
 
     def footer(self):

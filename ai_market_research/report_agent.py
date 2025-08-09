@@ -23,7 +23,7 @@ def summarize_strategy(file_path):
     )
 
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",  # ✅ Updated model
+        model="llama-3.3-70b-specdec",  # ✅ Updated model
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": strategy}

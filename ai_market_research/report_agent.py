@@ -3,7 +3,7 @@ import requests
 from flask import Flask, request, jsonify
 from fpdf import FPDF
 
-# ✅ Load Groq API key from Streamlit secrets or env
+# ✅ Load Groq API key
 try:
     import streamlit as st
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -13,7 +13,7 @@ except:
 if not GROQ_API_KEY:
     raise ValueError("❌ GROQ_API_KEY not found in secrets or environment variables.")
 
-# 🧠 Summarize strategy using Groq LLaMA-3 API
+# 🧠 Summarize using Groq
 def summarize_strategy(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"❌ Strategy file not found: {file_path}")
@@ -24,7 +24,7 @@ def summarize_strategy(file_path):
     payload = {
         "model": "llama3-70b-8192",
         "messages": [
-            {"role": "system", "content": "You are a professional market research analyst. Summarize this for a polished, concise business report."},
+            {"role": "system", "content": "You are a professional market research analyst. Summarize this for a polished, concise business report with key points clearly outlined."},
             {"role": "user", "content": strategy}
         ],
         "max_tokens": 500
@@ -40,17 +40,23 @@ def summarize_strategy(file_path):
 
     return response.json()["choices"][0]["message"]["content"].strip()
 
-# 🎨 PDF styling
+# 🎨 Pretty PDF with header box & images
 class PDF(FPDF):
     def header(self):
+        # Blue header box
+        self.set_fill_color(0, 102, 204)
+        self.rect(0, 0, 210, 25, 'F')
+
+        # Logo if exists
+        if os.path.exists("logo.png"):
+            self.image("logo.png", 10, 5, 20)
+
+        # Title
+        self.set_text_color(255, 255, 255)
         self.set_font("DejaVu", "B", 18)
-        self.set_text_color(40, 40, 40)
-        self.cell(0, 10, "📊 AI-Powered Market Research Report", ln=True, align="C")
-        self.ln(5)
-        self.set_draw_color(0, 102, 204)
-        self.set_line_width(1)
-        self.line(10, 25, 200, 25)
-        self.ln(5)
+        self.cell(0, 15, "AI-Powered Market Research Report", ln=True, align="C")
+
+        self.ln(10)
 
     def chapter_title(self, title):
         self.set_font("DejaVu", "B", 14)
@@ -64,9 +70,16 @@ class PDF(FPDF):
         self.multi_cell(0, 8, body)
         self.ln()
 
+    def add_section_image(self, image_path):
+        if os.path.exists(image_path):
+            self.image(image_path, x=10, w=190)
+            self.ln(5)
+
 # 📄 Generate PDF
 def generate_pdf(summary_text, output_path):
     pdf = PDF()
+
+    # Load DejaVu font for Unicode
     try:
         pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
         pdf.add_font("DejaVu", "B", "DejaVuSans.ttf", uni=True)
@@ -76,28 +89,37 @@ def generate_pdf(summary_text, output_path):
 
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+
+    # Optional cover image
+    if os.path.exists("cover.jpg"):
+        pdf.add_section_image("cover.jpg")
+
     pdf.chapter_title("Executive Summary")
     pdf.chapter_body(summary_text)
+
+    # Optional chart/graphic
+    if os.path.exists("chart.png"):
+        pdf.chapter_title("Market Trends")
+        pdf.add_section_image("chart.png")
 
     pdf.output(output_path)
     print(f"✅ PDF report generated: {output_path}")
 
-# 🚀 Main function for pipeline
+# 🚀 Main pipeline
 def run_report_agent():
     summary = summarize_strategy("ai-market-research/strategy.txt")
 
-    # Save summary text
-    summary_path = "ai-market-research/summary.txt"
-    os.makedirs(os.path.dirname(summary_path), exist_ok=True)
-    with open(summary_path, "w", encoding="utf-8") as f:
+    # Save text
+    os.makedirs("ai-market-research", exist_ok=True)
+    with open("ai-market-research/summary.txt", "w", encoding="utf-8") as f:
         f.write(summary)
 
     print("✅ Summary saved to summary.txt")
 
-    # Generate polished PDF
+    # Save PDF
     generate_pdf(summary, "ai-market-research/final_report.pdf")
 
-# 🌐 Flask API for PDF generation (optional)
+# 🌐 Optional Flask route
 app = Flask(__name__)
 
 @app.route("/report", methods=["POST"])
@@ -105,6 +127,3 @@ def generate_report():
     insights = request.json.get("insights", "")
     generate_pdf(insights, "ai-market-research/final_report.pdf")
     return jsonify({"status": "success", "message": "PDF generated."})
-
-if __name__ == "__main__":
-    run_report_agent()

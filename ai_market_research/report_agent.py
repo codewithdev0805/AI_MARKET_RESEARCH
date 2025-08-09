@@ -1,95 +1,137 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from groq import Groq
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from fpdf import FPDF
+from groq import Groq  # ✅ LLaMA client
 
-# ✅ Try to load API key from Streamlit secrets or fallback to env
+# ====== Load API key ======
 try:
     import streamlit as st
-    api_key = st.secrets["GROQ_API_KEY"]
+    API_KEY = st.secrets.get("GROQ_API_KEY", None)
 except:
-    api_key = os.getenv("GROQ_API_KEY")
+    API_KEY = os.getenv("GROQ_API_KEY")
 
-if not api_key:
+if not API_KEY:
     raise ValueError("❌ GROQ_API_KEY not found in Streamlit secrets or environment variables.")
 
 # ✅ Initialize Groq client
-client = Groq(api_key=api_key)
+client = Groq(api_key=API_KEY)
 
-# 🧠 Summarize strategy using Groq
-def summarize_strategy(file_path):
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"❌ strategy file not found: {file_path}")
 
-    with open(file_path, "r", encoding='utf-8') as f:
-        strategy = f.read()
-
-    system_prompt = "You are a market research analyst. Summarize this for a business report."
-
+# ====== AI CALL ======
+def call_ai_model(prompt: str) -> str:
+    """Send prompt to LLaMA via Groq and return response text."""
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama3-8b-8192",  # You can use llama3-70b-8192 if needed
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": strategy}
-        ]
+            {"role": "system", "content": "You are a market research analyst. Respond in structured bullet points."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7,
+        max_tokens=1500
     )
-
     return response.choices[0].message.content.strip()
 
-# 📝 Generate PDF from summary.txt
-def generate_pdf_from_summary():
-    summary_path = "ai-market-research/summary.txt"
-    pdf_path = "ai-market-research/final_report.pdf"
 
-    if not os.path.exists(summary_path):
-        raise FileNotFoundError("❌ summary.txt not found.")
+# ====== PDF GENERATOR ======
+def generate_pdf(data, output_path):
+    """Generate a clean, professional PDF report."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
 
-    with open(summary_path, "r", encoding="utf-8") as f:
-        summary_text = f.read()
+    # Title
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.multi_cell(0, 10, data["title"])
+    pdf.ln(5)
 
-    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-    c = canvas.Canvas(pdf_path, pagesize=letter)
-    width, height = letter
+    # Key Highlights
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Key Highlights:", ln=True)
+    pdf.set_font("Helvetica", "", 12)
+    for item in data["key_highlights"]:
+        pdf.multi_cell(0, 8, f"• {item}")
+    pdf.ln(3)
 
-    y_position = height - 50
-    for line in summary_text.split("\n"):
-        c.drawString(50, y_position, line)
-        y_position -= 15
-        if y_position < 50:
-            c.showPage()
-            y_position = height - 50
+    # Business Implications
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Business Implications:", ln=True)
+    pdf.set_font("Helvetica", "", 12)
+    for item in data["business_implications"]:
+        pdf.multi_cell(0, 8, f"• {item}")
+    pdf.ln(3)
 
-    c.save()
-    print(f"✅ PDF generated at {pdf_path}")
+    # Recommendations
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, "Recommendations:", ln=True)
+    pdf.set_font("Helvetica", "", 12)
+    for item in data["recommendations"]:
+        pdf.multi_cell(0, 8, f"• {item}")
 
-# ✅ Function to be called from app.py
-def run_report_agent():
-    summary = summarize_strategy("ai-market-research/strategy.txt")
-
-    output_path = "ai-market-research/summary.txt"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    pdf.output(output_path)
+    print(f"✅ PDF saved to {output_path}")
 
-    with open(output_path, "w", encoding='utf-8') as f:
-        f.write(summary)
 
-    print("✅ Final report saved to summary.txt")
+# ====== MAIN FUNCTION ======
+def run_report_agent():
+    strategy_path = "ai-market-research/strategy.txt"
+    if not os.path.exists(strategy_path):
+        raise FileNotFoundError("❌ strategy.txt not found. Run analysis_agent first.")
 
-    # Generate PDF locally
-    generate_pdf_from_summary()
+    with open(strategy_path, "r", encoding="utf-8") as f:
+        strategy = f.read()
 
-# Optional Flask app (if you still want API access)
+    # Ask AI to structure content
+    prompt = f"""
+    Summarize the following strategy for a business report.
+    Return the result in this structure:
+    Title: ...
+    Key Highlights: [point1, point2, ...]
+    Business Implications: [point1, point2, ...]
+    Recommendations: [point1, point2, ...]
+
+    Strategy content:
+    {strategy}
+    """
+    ai_response = call_ai_model(prompt)
+
+    # Parse into structured data
+    structured_data = {"title": "", "key_highlights": [], "business_implications": [], "recommendations": []}
+    section = None
+    for line in ai_response.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower().startswith("title:"):
+            structured_data["title"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("key highlights"):
+            section = "key_highlights"
+        elif line.lower().startswith("business implications"):
+            section = "business_implications"
+        elif line.lower().startswith("recommendations"):
+            section = "recommendations"
+        elif line.startswith("*") or line.startswith("-"):
+            if section:
+                structured_data[section].append(line[1:].strip())
+
+    # Save summary.txt
+    with open("ai-market-research/summary.txt", "w", encoding="utf-8") as f:
+        f.write(ai_response)
+
+    # Generate PDF
+    generate_pdf(structured_data, "ai-market-research/final_report.pdf")
+
+
+# ====== FLASK ENDPOINT (optional) ======
 app = Flask(__name__)
 
 @app.route("/report", methods=["POST"])
 def generate_report():
     insights = request.json.get("insights", "")
+    run_report_agent()
+    return jsonify({"status": "PDF generated"})
 
-    # Save insights to summary and PDF
-    summary_path = "ai-market-research/summary.txt"
-    with open(summary_path, "w", encoding="utf-8") as f:
-        f.write(insights)
 
-    generate_pdf_from_summary()
-    return jsonify({"message": "✅ PDF generated successfully"})
+if __name__ == "__main__":
+    run_report_agent()

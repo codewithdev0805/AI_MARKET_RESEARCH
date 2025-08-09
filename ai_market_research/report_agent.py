@@ -3,7 +3,7 @@ import requests
 from flask import Flask, request, jsonify
 import google.generativeai as genai
 
-# ✅ Try to load API key from Streamlit secrets or fallback to environment variable
+# ✅ Load API key from Streamlit secrets or environment
 try:
     import streamlit as st
     api_key = st.secrets["GEMINI_API_KEY"]
@@ -11,7 +11,7 @@ except:
     api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
-    raise ValueError(" GEMINI_API_KEY not found in Streamlit secrets or environment variables.")
+    raise ValueError("❌ GEMINI_API_KEY not found.")
 
 # ✅ Configure Gemini
 genai.configure(api_key=api_key)
@@ -24,8 +24,11 @@ def summarize_strategy(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         strategy = f.read()
 
-    model = genai.GenerativeModel("gemini-pro")
-    response = model.generate_content(f"You are a market research analyst. Summarize this for a business report:\n\n{strategy}")
+    model = genai.GenerativeModel("gemini-1.5-pro")  # ✅ Correct latest model name
+    response = model.generate_content(
+        f"You are a market research analyst. Summarize this for a business report:\n\n{strategy}"
+    )
+
     return response.text.strip()
 
 # ✅ Function to be called from app.py

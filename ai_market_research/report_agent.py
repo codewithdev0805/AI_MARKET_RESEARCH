@@ -2,16 +2,18 @@ import os
 import requests
 from flask import Flask, request, jsonify
 from fpdf import FPDF
-from llamaapi import LlamaAPI
 
-# 🔹 Initialize LLaMA API
-LLAMA_API_KEY = os.getenv("LLAMA_API_KEY")
-if not LLAMA_API_KEY:
-    raise ValueError("❌ LLAMA_API_KEY not found in environment variables.")
+# ✅ Load Groq API key from Streamlit secrets or env
+try:
+    import streamlit as st
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-llama = LlamaAPI(LLAMA_API_KEY)
+if not GROQ_API_KEY:
+    raise ValueError("❌ GROQ_API_KEY not found in secrets or environment variables.")
 
-# 🧠 Summarize strategy using LLaMA
+# 🧠 Summarize strategy using Groq LLaMA-3 API
 def summarize_strategy(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"❌ Strategy file not found: {file_path}")
@@ -19,17 +21,26 @@ def summarize_strategy(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         strategy = f.read()
 
-    prompt = f"You are a professional market research analyst. Summarize the following strategy into a short, structured, and beautiful report:\n\n{strategy}"
-
-    response = llama.run({
-        "model": "llama-3-70b-chat",
-        "messages": [{"role": "user", "content": prompt}],
+    payload = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": "You are a professional market research analyst. Summarize this for a polished, concise business report."},
+            {"role": "user", "content": strategy}
+        ],
         "max_tokens": 500
-    })
+    }
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers)
+    response.raise_for_status()
 
     return response.json()["choices"][0]["message"]["content"].strip()
 
-# 🎨 Custom PDF Class for styling
+# 🎨 PDF styling
 class PDF(FPDF):
     def header(self):
         self.set_font("DejaVu", "B", 18)

@@ -1,77 +1,40 @@
-from flask import Flask, request, jsonify
-import requests
 import os
+import streamlit as st
+from groq import Groq
 
-app = Flask(__name__)
-
-# Set up data directory path
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "..", "ai-market-research")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-# Agent: Interprets raw trends
-def analyst_agent(trends):
-    print("🔍 Analyst Agent: Interpreting raw market trends...")
-    return [trend.strip().capitalize() for trend in trends if trend.strip()]
-
-# Agent: Translates insights into business strategy
-def strategist_agent(insights):
-    print("🧠 Strategist Agent: Generating business recommendations...")
-    return [f"Opportunity: {insight}" for insight in insights]
-
-# Main function to run both agents
 def run_analysis_agent(keyword):
-    print(f"⚙️ Running analysis agent for keyword: {keyword}")
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-    # Save keyword
-    keyword_file = os.path.join(DATA_DIR, "selected_keyword.txt")
-    with open(keyword_file, "w", encoding='utf-8') as f:
-        f.write(keyword)
+    raw_trends_path = "ai-market-research/raw_trends.txt"
+    with open(raw_trends_path, "r", encoding="utf-8") as f:
+        raw_trends = f.read()
 
-    # Load raw trends
-    raw_path = os.path.join(DATA_DIR, "raw_trends.txt")
-    if not os.path.exists(raw_path):
-        raise FileNotFoundError(f"Missing file: {raw_path}")
+    # ✅ Strict keyword filter before sending to LLaMA
+    filtered_trends = "\n".join(
+        [line for line in raw_trends.split("\n") if keyword.lower() in line.lower()]
+    )
+    if not filtered_trends.strip():
+        filtered_trends = f"No relevant trends found for {keyword}."
 
-    with open(raw_path, "r", encoding='utf-8') as f:
-        raw = f.readlines()
+    prompt = f"""
+    You are a market research analyst.
+    ONLY talk about '{keyword}' in the market context.
+    Ignore unrelated industries, brands, or events even if they appear in the data.
+    
+    Here is the research data:
+    {filtered_trends}
 
-    # Optional: Filter raw data by keyword
-    raw_filtered = [line for line in raw if keyword.lower() in line.lower()]
-    if not raw_filtered:
-        print("⚠️ No matching trends found for the keyword. Using full dataset.")
-        raw_filtered = raw
+    Produce a strategy in a structured, clear format.
+    """
 
-    # Run both agents
-    interpreted = analyst_agent([f"Keyword: {keyword}"] + raw_filtered)
-    strategy = strategist_agent(interpreted)
+    completion = client.chat.completions.create(
+        model="llama-3.1-70b-versatile",
+        messages=[{"role": "user", "content": prompt}]
+    )
 
-    # Save strategy to file
-    strategy_path = os.path.join(DATA_DIR, "strategy.txt")
-    with open(strategy_path, "w", encoding='utf-8') as f:
-        for item in strategy:
-            f.write(f"{item}\n")
+    strategy_text = completion.choices[0].message.content
 
-    print("✅ Strategy recommendations saved to strategy.txt")
-    return strategy
+    with open("ai-market-research/strategy.txt", "w", encoding="utf-8") as f:
+        f.write(strategy_text)
 
-# API endpoint to trigger agent
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    data = request.json.get("data", [])
-    keyword = request.json.get("keyword", "default")
-
-    # Use new agents
-    interpreted = analyst_agent(data)
-    strategy = strategist_agent(interpreted)
-
-    # Optional: trigger external report generation
-    try:
-        requests.post("http://localhost:7001/report", json={"insights": strategy})
-    except Exception as e:
-        print(f"⚠️ Could not send report: {e}")
-
-    return jsonify({"insights": strategy})
-
-if __name__ == "__main__":
-    app.run(port=6001)
+    print(f"✅ Strategy generated for {keyword}")

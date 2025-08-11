@@ -1,119 +1,88 @@
 import os
-import datetime
-import matplotlib.pyplot as plt
+import streamlit as st
 from fpdf import FPDF
 from groq import Groq
 
-# ---------- Load API Key & Model Name ----------
-try:
-    import streamlit as st
-    api_key = st.secrets["GROQ_API_KEY"]
-    model_name = st.secrets.get("MODEL_NAME", "llama-3.3-70b-versatile")
-except:
-    api_key = os.getenv("GROQ_API_KEY")
-    model_name = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+# ✅ Load API key and model name from Streamlit secrets
+api_key = st.secrets["GROQ_API_KEY"]
+model_name = st.secrets.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
-if not api_key:
-    raise ValueError("❌ API key not found.")
-
+# Initialize Groq client
 client = Groq(api_key=api_key)
 
-# ---------- AI Summarization ----------
+# 📌 Summarize strategy file
 def summarize_strategy(file_path):
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"❌ Strategy file not found: {file_path}")
+        raise FileNotFoundError(f"❌ File not found: {file_path}")
 
     with open(file_path, "r", encoding="utf-8") as f:
         strategy = f.read()
 
-    prompt = f"You are a market research analyst. Summarize this for a polished, professional business report:\n\n{strategy}"
+    prompt = f"You are a market research analyst. Summarize this in a well-structured, professional business report format:\n\n{strategy}"
 
     response = client.chat.completions.create(
         model=model_name,
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3
     )
 
     return response.choices[0].message.content.strip()
 
-# ---------- PDF Class ----------
+
+# 📄 PDF Template Class
 class PDF(FPDF):
     def header(self):
-        self.set_fill_color(41, 128, 185)  # Blue header
-        self.rect(0, 0, 210, 25, 'F')
-        self.set_text_color(255, 255, 255)
+        # Blue header background
+        self.set_fill_color(0, 102, 204)
+        self.rect(0, 0, 210, 40, "F")
+
+        # Document Icon
+        icon_path = "ai-market-research/assets/document_icon.png"
+        if os.path.exists(icon_path):
+            self.image(icon_path, x=85, y=5, w=40)
+
+        # Move below image and set title
+        self.set_xy(10, 30)
         self.set_font("Helvetica", "B", 18)
-        self.cell(0, 12, "Market Research Report", ln=True, align="C")
-        self.set_font("Helvetica", "", 12)
-        self.cell(0, 8, datetime.date.today().strftime("%B %d, %Y"), ln=True, align="C")
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 10, "Market Research Report", ln=True, align="C")
         self.ln(10)
 
-    def section_title(self, title, icon_path=None):
-        self.set_text_color(41, 128, 185)
-        self.set_font("Helvetica", "B", 14)
-        if icon_path and os.path.exists(icon_path):
-            self.image(icon_path, x=self.get_x(), y=self.get_y(), w=8)
-            self.cell(10)  # Move right
-        self.cell(0, 10, title, ln=True)
-        self.ln(2)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 9)
+        self.set_text_color(150)
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
-    def section_body(self, text):
-        self.set_text_color(0, 0, 0)
+    def chapter_body(self, text):
+        self.set_text_color(0)
         self.set_font("Helvetica", "", 12)
         self.multi_cell(0, 8, text)
         self.ln()
 
-# ---------- Chart Creation ----------
-def create_trend_chart(data, output_path):
-    plt.figure(figsize=(6, 3))
-    bars = plt.bar(data.keys(), data.values(), color="#2980b9")
-    plt.xticks(rotation=45, ha='right')
-    plt.title("Keyword Trend Frequency", fontsize=14, color="#2980b9")
-    plt.tight_layout()
-    # Label bars
-    for bar in bars:
-        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height(), str(bar.get_height()),
-                 ha='center', va='bottom', fontsize=10)
-    plt.savefig(output_path, dpi=300)
-    plt.close()
 
-# ---------- PDF Generation ----------
-def generate_pdf(summary_text, trend_data, output_path):
+# 📌 Generate PDF
+def generate_pdf(summary, output_path):
     pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+    pdf.chapter_body(summary)
+    pdf.output(output_path)
+    print(f"✅ PDF saved at {output_path}")
 
-    # Executive Summary Section
-    pdf.section_title("Executive Summary", icon_path="ai-market-research/icons/summary.png")
-    pdf.section_body(summary_text)
 
-    # Trend Analysis Section
-    if trend_data:
-        chart_path = "ai-market-research/trend_chart.png"
-        create_trend_chart(trend_data, chart_path)
-        pdf.section_title("Trend Analysis", icon_path="ai-market-research/icons/chart.png")
-        pdf.image(chart_path, x=10, w=180)
-
-    # Optional Branding / Footer Image
-    branding_path = "ai-market-research/icons/footer.png"
-    if os.path.exists(branding_path):
-        pdf.ln(10)
-        pdf.image(branding_path, x=60, w=90)
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    pdf.output(output_path, "F")
-
-# ---------- Main Function ----------
+# 🚀 Main Function
 def run_report_agent():
     summary = summarize_strategy("ai-market-research/strategy.txt")
 
-    # Load trend data if available
-    trend_data = {}
-    trends_file = "ai-market-research/raw_trends.txt"
-    if os.path.exists(trends_file):
-        with open(trends_file, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split(":")
-                if len(parts) == 2:
-                    trend_data[parts[0].strip()] = int(parts[1].strip())
+    # Save summary.txt
+    with open("ai-market-research/summary.txt", "w", encoding="utf-8") as f:
+        f.write(summary)
 
-    generate_pdf(summary, trend_data, "ai-market-research/final_report.pdf")
-    print("✅ Final report saved to final_report.pdf")
+    # Generate PDF
+    generate_pdf(summary, "ai-market-research/final_report.pdf")
+    print("✅ Final report PDF generated!")
+
+
+if __name__ == "__main__":
+    run_report_agent()
